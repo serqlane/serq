@@ -1,0 +1,8 @@
+[package]
+name = "serqlane"
+description = "The Serqlane Programming Language"
+version = "0.1.0"
+license = "ISC"
+edition = "2024"
+
+[dependencies]
