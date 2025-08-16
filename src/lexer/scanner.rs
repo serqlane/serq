@@ -90,9 +90,14 @@ impl<'src> Scanner<'src> {
 
     #[inline]
     fn peek(&self) -> Option<char> {
-        // NOTE: Cloning the iterator is very cheap and has less
-        // overhead than going through the Peekable trait.
         let mut it = self.source.clone();
+        it.next().map(|v| v.1)
+    }
+
+    #[inline]
+    fn peek2(&self) -> Option<char> {
+        let mut it = self.source.clone();
+        it.next()?;
         it.next().map(|v| v.1)
     }
 
@@ -126,18 +131,47 @@ impl<'src> Scanner<'src> {
         }
     }
 
-    fn whitespace(&mut self) -> bool {
-        let mut inject_semicolon = false;
-
-        // TODO: Remove comments here too.
+    fn whitespace(&mut self) -> Option<(Token, SourceSpan)> {
+        let mut token = None;
         while let Some(c) = self.peek() {
             match c {
                 c if is_whitespace(c) => {
-                    self.consume();
-
                     // Check if we need to insert an automatic semicolon.
                     if c == '\n' && should_terminate(self.previous) {
-                        inject_semicolon = true;
+                        let pos = self.offset();
+                        token = Some((Token::Semicolon, SourceSpan::new(pos, pos)));
+                    }
+                    self.consume();
+                }
+
+                // Consume the contents of a line comment.
+                '/' if self.peek2() == Some('/') => {
+                    while let Some(c) = self.peek() {
+                        if c == '\n' {
+                            break;
+                        }
+                        self.consume();
+                    }
+                }
+
+                // Consume the contents of a multiline comment.
+                '/' if self.peek2() == Some('*') => {
+                    let start = self.offset();
+                    self.consume();
+                    self.consume();
+
+                    while let Some(c) = self.peek() {
+                        if c == '*' && self.peek2() == Some('/') {
+                            break;
+                        }
+                        self.consume();
+                    }
+
+                    // Consume the closing */, or emit an error.
+                    if self.consume().and(self.consume()).is_none() {
+                        let end = self.offset();
+                        token = Some((Token::Error, SourceSpan::new(start, end)));
+                        break;
                     }
                 }
 
@@ -145,7 +179,7 @@ impl<'src> Scanner<'src> {
             }
         }
 
-        inject_semicolon
+        token
     }
 
     fn string(&mut self) -> Token {
@@ -213,12 +247,12 @@ impl<'src> Scanner<'src> {
 
     fn scan(&mut self) -> (Token, SourceSpan) {
         // First, consume whitspace and inject a semicolon, if necessary.
-        // Note that a call consumes all available whitespace so the next
-        // call is guaranteed to return false. This is important to make
-        // sure we do not get stuck in an infinite semicolon loop.
-        if self.whitespace() {
-            let off = self.offset();
-            return (Token::Semicolon, SourceSpan::new(off, off));
+        // A call consumes all available whitespace so the next call is
+        // guaranteed to not return semicolon again. This is necessary to
+        // ensure we don't get stuck in an infinite semicolon loop.
+        if let Some((token, span)) = self.whitespace() {
+            self.previous = token;
+            return (token, span);
         }
 
         let start = self.offset();
