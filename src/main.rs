@@ -14,11 +14,9 @@ fn main() {
 
         let scanner = Scanner::new(&buf);
         for (token, span) in scanner {
-            let start = span.start();
+            let (line, col) = span.start().as_line_and_column(&buf);
             println!(
-                "{}:{} {token:?} (\"{}\")",
-                start.line(&buf),
-                start.column(&buf),
+                "{line}:{col}: {token:?} (\"{}\")",
                 span.resolve(&buf).unwrap()
             );
         }

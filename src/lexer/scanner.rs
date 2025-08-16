@@ -202,7 +202,7 @@ impl<'src> Scanner<'src> {
         }
 
         // Try to match a potential keyword using a perfect hash function.
-        if keyword_candidate && cursor > 0 {
+        if keyword_candidate {
             if let Some(token) = is_keyword(keyword_buf, cursor) {
                 return token;
             }
@@ -218,7 +218,7 @@ impl<'src> Scanner<'src> {
         // sure we do not get stuck in an infinite semicolon loop.
         if self.whitespace() {
             let off = self.offset();
-            return (Token::Semicolon, SourceSpan::new(off - 1, off));
+            return (Token::Semicolon, SourceSpan::new(off, off));
         }
 
         let start = self.offset();
@@ -270,7 +270,7 @@ impl<'src> Scanner<'src> {
             ':' => Token::Colon,
             ',' => Token::Comma,
             ';' => Token::Semicolon,
-            '\"' => self.string(),
+            '"' => self.string(),
 
             _ => Token::Error,
         };

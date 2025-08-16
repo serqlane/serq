@@ -2,23 +2,26 @@
 pub struct SourcePosition(usize);
 
 impl SourcePosition {
-    pub fn line(&self, input: &str) -> usize {
+    pub fn as_line_and_column(self, input: &str) -> (u32, u32) {
+        let mut line = 1;
+        let mut column = 1;
         let mut pos = 0;
-        1 + input
-            .split('\n')
-            .take_while(|l| {
-                pos += l.len();
-                pos <= self.0
-            })
-            .count()
-    }
+        for c in input.chars() {
+            if pos >= self.0 {
+                break;
+            }
 
-    pub fn column(&self, input: &str) -> usize {
-        let (input, _) = input.split_at(self.0);
-        input
-            .rfind('\n')
-            .map(|pos| self.0 - pos)
-            .unwrap_or(self.0 + 1)
+            if c == '\n' {
+                line += 1;
+                column = 1;
+            } else {
+                column += 1;
+            }
+
+            pos += c.len_utf8();
+        }
+
+        (line, column)
     }
 }
 
