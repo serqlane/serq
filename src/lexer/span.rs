@@ -17,8 +17,8 @@ impl SourcePosition {
         let (input, _) = input.split_at(self.0);
         input
             .rfind('\n')
-            .map(|pos| self.0 - pos - 1)
-            .unwrap_or(self.0)
+            .map(|pos| self.0 - pos)
+            .unwrap_or(self.0 + 1)
     }
 }
 
