@@ -5,7 +5,7 @@ fn keyword_hash(key: &[u8]) -> usize {
     // is the same as the order in keywords.txt.
     //
     // To generate, run the following in the project root:
-    // python scripts/perfect_hash.py scripts/keywords.txt scripts/keywords.tmpl.rs -o std
+    // ./scripts/perfect_hash.py scripts/keywords.txt scripts/keywords.tmpl.rs -o std
 
     static G: &[u8] = &[
         $G

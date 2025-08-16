@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 Generate a minimal perfect hash function for the keys in a file,
 desired hash values may be specified within this file as well.
