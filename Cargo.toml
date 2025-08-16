@@ -6,3 +6,4 @@ license = "ISC"
 edition = "2024"
 
 [dependencies]
+unicode-ident = "1"
