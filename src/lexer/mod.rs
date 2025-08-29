@@ -83,7 +83,12 @@ fn is_ident1(c: char) -> bool {
 }
 
 fn is_ident2(c: char) -> bool {
-    unicode_ident::is_xid_continue(c)
+    if c.is_ascii() {
+        // Avoid the slower `is_xid_continue` path for ASCII ranges.
+        matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9')
+    } else {
+        unicode_ident::is_xid_continue(c)
+    }
 }
 
 impl<'src> Lexer<'src> {
