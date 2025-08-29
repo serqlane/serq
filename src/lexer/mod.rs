@@ -91,6 +91,7 @@ impl<'src> Lexer<'src> {
     pub fn new(source: &'src str) -> Self {
         // Invariant: Source files need to be smaller than 4GiB so that
         // our spans can cover the entire text with u32 offsets.
+        debug_assert!(u32::try_from(source.len()).is_ok());
         debug_assert!(source.len() <= u32::MAX as usize);
 
         Self {
@@ -99,30 +100,34 @@ impl<'src> Lexer<'src> {
         }
     }
 
-    #[inline]
     fn offset(&self) -> u32 {
         self.source.offset() as u32
     }
 
-    #[inline]
     fn peek(&self) -> Option<char> {
         let mut it = self.source.clone();
         it.next().map(|v| v.1)
     }
 
-    #[inline]
     fn peek2(&self) -> Option<char> {
         let mut it = self.source.clone();
         it.next()?;
         it.next().map(|v| v.1)
     }
 
-    #[inline]
     fn consume(&mut self) -> Option<char> {
         self.source.next().map(|v| v.1)
     }
 
-    #[inline]
+    fn try_eat(&mut self, c: char) -> bool {
+        if self.peek() == Some(c) {
+            self.consume();
+            true
+        } else {
+            false
+        }
+    }
+
     fn match1(&mut self, c: char, a: TokenKind, b: TokenKind) -> TokenKind {
         if self.peek() == Some(c) {
             self.consume();
@@ -132,7 +137,6 @@ impl<'src> Lexer<'src> {
         }
     }
 
-    #[inline]
     fn match2(
         &mut self,
         c1: char,
@@ -152,6 +156,54 @@ impl<'src> Lexer<'src> {
             }
             _ => c,
         }
+    }
+
+    fn line_comment(&mut self) -> Token {
+        let start = self.offset();
+
+        // Discard the entire line as a comment.
+        while let Some(c) = self.peek() {
+            if c == '\n' {
+                break;
+            }
+            self.consume();
+        }
+
+        let end = self.offset();
+        Token {
+            kind: TokenKind::Comment,
+            span: SourceSpan::from(start..end),
+        }
+    }
+
+    fn multi_line_comment(&mut self) -> Token {
+        let start = self.offset();
+
+        // Consume the `/*` characters at the start.
+        self.consume();
+        self.consume();
+
+        // Eat characters until we find the closing `*/`.
+        while let Some(c) = self.peek() {
+            if c == '*' && self.peek2() == Some('/') {
+                break;
+            }
+            self.consume();
+        }
+
+        // Now try to consume these remaining characters.
+        let star = self.consume();
+        let slash = self.consume();
+
+        let end = self.offset();
+        let span = SourceSpan::from(start..end);
+
+        let kind = match star.and(slash) {
+            Some(..) => TokenKind::Comment,
+            None => TokenKind::Error,
+        };
+
+        Token { kind, span }
     }
 
     fn whitespace(&mut self) -> Option<Token> {
@@ -179,37 +231,14 @@ impl<'src> Lexer<'src> {
 
                 // Consume the contents of a line comment.
                 '/' if self.peek2() == Some('/') => {
-                    while let Some(c) = self.peek() {
-                        if c == '\n' {
-                            break;
-                        }
-                        self.consume();
-                    }
+                    token = Some(self.line_comment());
+                    break;
                 }
 
                 // Consume the contents of a multiline comment.
                 '/' if self.peek2() == Some('*') => {
-                    let start = self.offset();
-                    self.consume();
-                    self.consume();
-
-                    // TODO: Do we want to allow nested /* */?
-                    while let Some(c) = self.peek() {
-                        if c == '*' && self.peek2() == Some('/') {
-                            break;
-                        }
-                        self.consume();
-                    }
-
-                    // Consume the closing */, or emit an error.
-                    if self.consume().and(self.consume()).is_none() {
-                        let end = self.offset();
-                        token = Some(Token {
-                            kind: TokenKind::Error,
-                            span: SourceSpan::from(start..end),
-                        });
-                        break;
-                    }
+                    token = Some(self.multi_line_comment());
+                    break;
                 }
 
                 _ => break,
@@ -228,7 +257,7 @@ impl<'src> Lexer<'src> {
             self.consume();
         }
 
-        // Consume the closing quote at the end.
+        // Try to consume the closing quote.
         if self.consume().is_some() {
             TokenKind::String
         } else {
@@ -323,16 +352,14 @@ impl<'src> Lexer<'src> {
             '|' => self.match2('=', OrEq, '|', OrOr, Or),
             '^' => self.match1('=', CaretEq, Caret),
             '<' => {
-                if self.peek() == Some('<') {
-                    self.consume();
+                if self.try_eat('<') {
                     self.match1('=', ShlEq, Shl)
                 } else {
                     self.match1('=', LtEq, Lt)
                 }
             }
             '>' => {
-                if self.peek() == Some('>') {
-                    self.consume();
+                if self.try_eat('>') {
                     self.match1('=', ShrEq, Shr)
                 } else {
                     self.match1('=', GtEq, Gt)
