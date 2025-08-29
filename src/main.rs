@@ -1,6 +1,8 @@
-mod lexer;
 use std::io::{self, BufRead, Write};
 
+mod diagnostic;
+
+mod lexer;
 use lexer::*;
 
 fn main() {
@@ -12,12 +14,13 @@ fn main() {
         stdout.flush().unwrap();
         stdin.read_line(&mut buf).unwrap();
 
-        let scanner = Scanner::new(&buf);
-        for (token, span) in scanner {
-            let (line, col) = span.start().as_line_and_column(&buf);
+        let lexer = Lexer::new(&buf);
+        for token in lexer {
+            let (line, col) = token.span().start().as_line_and_column(&buf);
             println!(
-                "{line}:{col}: {token:?} (\"{}\")",
-                span.resolve(&buf).unwrap()
+                "{line}:{col}: {:?} (\"{}\")",
+                token.kind(),
+                &buf.as_str()[token.span()]
             );
         }
 
