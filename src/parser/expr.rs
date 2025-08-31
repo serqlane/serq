@@ -108,9 +108,9 @@ impl<'src> Parser<'src> {
 
                 if op == LeftParen {
                     let mut params = Vec::new();
-                    while !matches!(self.peek(), RightParen | Eof) {
+                    while !self.at(RightParen) && !self.at(Eof) {
                         let param = self.expression_(0);
-                        if self.peek() != RightParen {
+                        if !self.at(RightParen) {
                             self.expect(Comma);
                         }
                         params.push(param);
