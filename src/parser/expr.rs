@@ -95,8 +95,8 @@ impl<'src> Parser<'src> {
                 op @ (Plus | Minus | Star | Slash | Percent | Shl | Shr | And | Or | Caret
                 | EqEq | BangEq | Lt | LtEq | Gt | GtEq | AndAnd | OrOr | Eq | PlusEq
                 | MinusEq | StarEq | SlashEq | PercentEq | ShlEq | ShrEq | AndEq | OrEq
-                | CaretEq | LeftBracket | LeftParen | RightParen | RightBracket) => op,
-                TokenKind::Semicolon => break,
+                | CaretEq | LeftBracket | LeftParen) => op,
+                RightParen | RightBracket | Comma | Semicolon => break,
                 op => panic!("{op:?}"), // Syntax error.
             };
 
