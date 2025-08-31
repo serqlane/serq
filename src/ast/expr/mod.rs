@@ -35,6 +35,7 @@ impl From<Token> for Ident {
 /// An expression in the Serqlane language.
 #[derive(Clone, Debug)]
 pub enum Expression {
+    Ident(Ident),
     Index(Index),
     Call(Call),
     Literal(Literal),

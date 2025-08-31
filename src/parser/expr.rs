@@ -1,6 +1,6 @@
 use super::Parser;
 use crate::{
-    ast::expr::{Expression, Literal},
+    ast::expr::{Expression, Ident, Literal},
     lexer::TokenKind,
 };
 
@@ -74,7 +74,8 @@ impl<'src> Parser<'src> {
         let text = self.text(token.span());
 
         let mut lhs = match token.kind() {
-            // TODO: Identifiers, strings, ...
+            // TODO: Strings, ...
+            Identifier => Expression::Ident(Ident::from(token)),
             Number => parse_number(text),
             b @ (True | False) => Expression::Literal(Literal::Bool(b == True)),
             LeftParen => {
