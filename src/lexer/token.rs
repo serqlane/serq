@@ -120,8 +120,6 @@ pub enum TokenKind {
     String,
     /// A number literal.
     Number,
-    /// A comment in the source code.
-    Comment,
 
     /// `break`
     Break,

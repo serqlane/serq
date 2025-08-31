@@ -1,9 +1,14 @@
 use std::io::{self, BufRead, Write};
 
+mod ast;
+
 mod diagnostic;
 
 mod lexer;
 use lexer::*;
+
+mod parser;
+use parser::*;
 
 fn main() {
     let mut buf = String::new();
@@ -23,6 +28,9 @@ fn main() {
                 &buf.as_str()[token.span()]
             );
         }
+
+        let mut parser = Parser::new(&buf);
+        println!("{:?}", parser.expression());
 
         buf.clear();
     }

@@ -36,10 +36,12 @@ use keywords::{MAX_KEYWORD_LEN, check_keyword};
 mod token;
 pub use token::{Token, TokenKind};
 
+const EOF_CHAR: char = '\0';
+
 /// Breaks down a given piece of source code into tokens.
 ///
 /// The only public-facing interface to drive the lexer is [`Iterator`];
-/// iteration stops after [`Token::Eof`] has been yielded once.
+/// iteration stops after [`TokenKind::Eof`] has been yielded once.
 ///
 /// See the [module documentation][crate::lexer] for more details.
 #[derive(Clone, Debug)]
@@ -97,7 +99,6 @@ impl<'src> Lexer<'src> {
         // Invariant: Source files need to be smaller than 4GiB so that
         // our spans can cover the entire text with u32 offsets.
         debug_assert!(u32::try_from(source.len()).is_ok());
-        debug_assert!(source.len() <= u32::MAX as usize);
 
         Self {
             source: source.char_indices(),
@@ -109,32 +110,26 @@ impl<'src> Lexer<'src> {
         self.source.offset() as u32
     }
 
-    fn peek(&self) -> Option<char> {
+    fn peek(&self) -> char {
         let mut it = self.source.clone();
-        it.next().map(|v| v.1)
+        it.next().map(|v| v.1).unwrap_or(EOF_CHAR)
     }
 
-    fn peek2(&self) -> Option<char> {
+    fn peek2(&self) -> char {
         let mut it = self.source.clone();
-        it.next()?;
-        it.next().map(|v| v.1)
+        it.next().and(it.next()).map(|v| v.1).unwrap_or(EOF_CHAR)
     }
 
-    fn consume(&mut self) -> Option<char> {
-        self.source.next().map(|v| v.1)
+    fn reached_eof(&self) -> bool {
+        self.peek() == EOF_CHAR
     }
 
-    fn try_eat(&mut self, c: char) -> bool {
-        if self.peek() == Some(c) {
-            self.consume();
-            true
-        } else {
-            false
-        }
+    fn consume(&mut self) -> char {
+        self.source.next().map(|v| v.1).unwrap_or(EOF_CHAR)
     }
 
     fn match1(&mut self, c: char, a: TokenKind, b: TokenKind) -> TokenKind {
-        if self.peek() == Some(c) {
+        if self.peek() == c {
             self.consume();
             a
         } else {
@@ -151,11 +146,11 @@ impl<'src> Lexer<'src> {
         c: TokenKind,
     ) -> TokenKind {
         match self.peek() {
-            Some(c) if c == c1 => {
+            v if v == c1 => {
                 self.consume();
                 a
             }
-            Some(c) if c == c2 => {
+            v if v == c2 => {
                 self.consume();
                 b
             }
@@ -163,58 +158,32 @@ impl<'src> Lexer<'src> {
         }
     }
 
-    fn line_comment(&mut self) -> Token {
-        let start = self.offset();
-
-        // Discard the entire line as a comment.
-        while let Some(c) = self.peek() {
-            if c == '\n' {
-                break;
-            }
+    fn line_comment(&mut self) {
+        while self.peek() != '\n' && !self.reached_eof() {
             self.consume();
-        }
-
-        let end = self.offset();
-        Token {
-            kind: TokenKind::Comment,
-            span: SourceSpan::from(start..end),
         }
     }
 
-    fn multi_line_comment(&mut self) -> Token {
-        let start = self.offset();
-
-        // Consume the `/*` characters at the start.
+    fn multi_line_comment(&mut self) {
         self.consume();
         self.consume();
 
-        // Eat characters until we find the closing `*/`.
-        while let Some(c) = self.peek() {
-            if c == '*' && self.peek2() == Some('/') {
-                break;
+        while !(self.peek() == '*' && self.peek2() == '/') {
+            if self.reached_eof() {
+                return;
             }
+
             self.consume();
         }
 
-        // Now try to consume these remaining characters.
-        let star = self.consume();
-        let slash = self.consume();
-
-        let end = self.offset();
-        let span = SourceSpan::from(start..end);
-
-        let kind = match star.and(slash) {
-            Some(..) => TokenKind::Comment,
-            None => TokenKind::Error,
-        };
-
-        Token { kind, span }
+        self.consume();
+        self.consume();
     }
 
     fn whitespace(&mut self) -> Option<Token> {
         let mut token = None;
-        while let Some(c) = self.peek() {
-            match c {
+        while !self.reached_eof() {
+            match self.peek() {
                 // When handling newlines, we need to check the last token
                 // of the line to see if an implicit semicolon should be
                 // injected to terminate an expression.
@@ -234,16 +203,14 @@ impl<'src> Lexer<'src> {
                     self.consume();
                 }
 
-                // Consume the contents of a line comment.
-                '/' if self.peek2() == Some('/') => {
-                    token = Some(self.line_comment());
-                    break;
-                }
-
-                // Consume the contents of a multiline comment.
-                '/' if self.peek2() == Some('*') => {
-                    token = Some(self.multi_line_comment());
-                    break;
+                // Handle comments and emit a token.
+                '/' => {
+                    let c2 = self.peek2();
+                    if c2 == '/' {
+                        self.line_comment();
+                    } else if c2 == '*' {
+                        self.multi_line_comment();
+                    }
                 }
 
                 _ => break,
@@ -254,28 +221,21 @@ impl<'src> Lexer<'src> {
     }
 
     fn string(&mut self) -> TokenKind {
-        // Consume characters of the string literal.
-        while let Some(c) = self.peek() {
-            if c == '"' {
-                break;
+        while self.peek() != '"' {
+            if self.reached_eof() {
+                return TokenKind::Error;
             }
+
             self.consume();
         }
 
-        // Try to consume the closing quote.
-        if self.consume().is_some() {
-            TokenKind::String
-        } else {
-            TokenKind::Error
-        }
+        self.consume();
+        TokenKind::String
     }
 
     fn number(&mut self) -> TokenKind {
         // TODO: Handle more complex number representations.
-        while let Some(c) = self.peek() {
-            if !c.is_ascii_digit() {
-                break;
-            }
+        while self.peek().is_ascii_digit() && !self.reached_eof() {
             self.consume();
         }
 
@@ -294,7 +254,8 @@ impl<'src> Lexer<'src> {
 
         // Consume the entire valid identifier. As long as the input
         // is a candidate for a keyword, spill it to keyword_buf.
-        while let Some(c) = self.peek() {
+        while !self.reached_eof() {
+            let c = self.peek();
             if keyword_candidate && cursor < MAX_KEYWORD_LEN && c.is_ascii_lowercase() {
                 keyword_buf[cursor] = c as u8;
                 cursor += 1;
@@ -330,7 +291,8 @@ impl<'src> Lexer<'src> {
 
         // Consume the next non-whitespace character or report EOF if no
         // more input is available to us.
-        let Some(c) = self.consume() else {
+        let c = self.consume();
+        if self.reached_eof() {
             self.previous = Eof;
             return Token {
                 kind: Eof,
@@ -357,14 +319,16 @@ impl<'src> Lexer<'src> {
             '|' => self.match2('=', OrEq, '|', OrOr, Or),
             '^' => self.match1('=', CaretEq, Caret),
             '<' => {
-                if self.try_eat('<') {
+                if self.peek() == '<' {
+                    self.consume();
                     self.match1('=', ShlEq, Shl)
                 } else {
                     self.match1('=', LtEq, Lt)
                 }
             }
             '>' => {
-                if self.try_eat('>') {
+                if self.peek() == '>' {
+                    self.consume();
                     self.match1('=', ShrEq, Shr)
                 } else {
                     self.match1('=', GtEq, Gt)
