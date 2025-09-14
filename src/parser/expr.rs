@@ -94,7 +94,7 @@ impl<'src> Parser<'src> {
         expr
     }
 
-    fn block(&mut self) -> Box<[Statement]> {
+    pub(super) fn block(&mut self) -> Box<[Statement]> {
         let mut block = Vec::new();
         while !self.at(TokenKind::RightBrace) && !self.eof() {
             let stmt = self.statement();

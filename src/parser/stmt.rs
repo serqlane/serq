@@ -47,22 +47,14 @@ impl<'src> Parser<'src> {
             None
         };
 
-        let mut block = Vec::new();
         self.eat(TokenKind::LeftBrace);
-        while !self.at(TokenKind::RightBrace) && !self.eof() {
-            let stmt = self.statement();
-            if !self.at(TokenKind::RightBrace) {
-                self.eat(TokenKind::Semicolon);
-            }
-            block.push(stmt);
-        }
-        self.eat(TokenKind::RightBrace);
+        let block = self.block();
 
         Function {
             name,
             args: args.into_boxed_slice(),
             ret,
-            block: block.into_boxed_slice(),
+            block,
         }
     }
 }
