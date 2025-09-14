@@ -7,14 +7,14 @@ use crate::{
 impl<'src> Parser<'src> {
     pub(super) fn statement(&mut self) -> Statement {
         if self.at(TokenKind::Let) || self.at(TokenKind::Mut) {
-            self.next();
+            let kw = self.next().unwrap();
             let ident = self.ident();
             self.eat(TokenKind::Eq);
             let expr = self.expression();
             Statement::Variable {
                 ident,
                 expr,
-                mutable: self.at(TokenKind::Mut),
+                mutable: kw.kind() == TokenKind::Mut,
             }
         } else if let Some(item) = self.item() {
             Statement::Item(item)
