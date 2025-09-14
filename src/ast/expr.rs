@@ -7,24 +7,18 @@ use super::{Ident, stmt::Statement};
 #[derive(Clone, Debug)]
 pub enum Expression {
     Ident(Ident),
-
-    Block {
-        stmts: Box<[Statement]>,
-    },
-
+    Block(Box<[Statement]>),
     Index {
         cont: Box<Expression>,
         idx: Box<Expression>,
     },
-
     Call {
         func: Box<Expression>,
         params: Box<[Expression]>,
     },
-
     Literal(Literal),
-
     Operator(OperatorExpression),
+    Return(Box<Expression>),
 }
 
 #[derive(Clone, Debug)]

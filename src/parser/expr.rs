@@ -3,6 +3,7 @@ use crate::{
     ast::{
         Ident,
         expr::{Expression, Literal, OperatorExpression},
+        stmt::Statement,
     },
     lexer::TokenKind,
 };
@@ -93,6 +94,19 @@ impl<'src> Parser<'src> {
         expr
     }
 
+    fn block(&mut self) -> Box<[Statement]> {
+        let mut block = Vec::new();
+        while !self.at(TokenKind::RightBrace) && !self.eof() {
+            let stmt = self.statement();
+            if !self.at(TokenKind::RightBrace) {
+                self.eat(TokenKind::Semicolon);
+            }
+            block.push(stmt);
+        }
+        self.eat(TokenKind::RightBrace);
+        block.into_boxed_slice()
+    }
+
     fn expression_(&mut self, mbp: u8) -> Expression {
         use TokenKind::*;
 
@@ -109,11 +123,13 @@ impl<'src> Parser<'src> {
                 self.eat(TokenKind::RightParen);
                 expr
             }
+            LeftBrace => Expression::Block(self.block()),
             op @ (Minus | Bang | Tilde | Star | And) => {
                 let ((), rbp) = prefix_binding_power(op);
                 let rhs = self.expression_(rbp);
                 Expression::Operator(OperatorExpression::prefix(op, rhs))
             }
+            Return => Expression::Return(Box::new(self.expression_(0))),
             _ => unimplemented!(),
         };
 
