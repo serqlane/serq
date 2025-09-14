@@ -102,7 +102,7 @@ impl<'src> Lexer<'src> {
 
         Self {
             source: source.char_indices(),
-            previous: TokenKind::Error,
+            previous: TokenKind::Eof,
         }
     }
 
@@ -182,12 +182,13 @@ impl<'src> Lexer<'src> {
 
     fn whitespace(&mut self) -> Option<Token> {
         let mut token = None;
-        while !self.reached_eof() {
+        loop {
             match self.peek() {
                 // When handling newlines, we need to check the last token
                 // of the line to see if an implicit semicolon should be
-                // injected to terminate an expression.
-                '\n' => {
+                // injected to terminate an expression. On EOF, we do the
+                // same so we don't accidentally cut a semicolon off.
+                '\n' | EOF_CHAR => {
                     if should_terminate_expr(self.previous) {
                         let pos = self.offset();
                         token = Some(Token {
@@ -195,7 +196,9 @@ impl<'src> Lexer<'src> {
                             span: SourceSpan::from(pos..pos),
                         });
                     }
-                    self.consume();
+                    if self.consume() == EOF_CHAR {
+                        break;
+                    }
                 }
 
                 // Other whitespace can be trivially ignored.
@@ -203,7 +206,7 @@ impl<'src> Lexer<'src> {
                     self.consume();
                 }
 
-                // Handle comments and emit a token.
+                // Handle comments.
                 '/' => {
                     let c2 = self.peek2();
                     if c2 == '/' {
@@ -292,7 +295,7 @@ impl<'src> Lexer<'src> {
         // Consume the next non-whitespace character or report EOF if no
         // more input is available to us.
         let c = self.consume();
-        if self.reached_eof() {
+        if c == EOF_CHAR {
             self.previous = Eof;
             return Token {
                 kind: Eof,
@@ -359,8 +362,9 @@ impl<'src> Iterator for Lexer<'src> {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.previous != TokenKind::Eof {
-            Some(self.scan())
+        let token = self.scan();
+        if token.kind() != TokenKind::Eof {
+            Some(token)
         } else {
             None
         }

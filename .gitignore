@@ -3,3 +3,6 @@
 
 # Nix
 /.direnv
+
+# Test files
+x.serq

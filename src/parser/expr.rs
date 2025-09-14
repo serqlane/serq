@@ -1,6 +1,9 @@
 use super::Parser;
 use crate::{
-    ast::expr::{Expression, Ident, Literal},
+    ast::{
+        Ident,
+        expr::{Expression, Literal, OperatorExpression},
+    },
     lexer::TokenKind,
 };
 
@@ -67,6 +70,29 @@ impl<'src> Parser<'src> {
         self.expression_(0)
     }
 
+    fn call_args(&mut self) -> Box<[Expression]> {
+        self.eat(TokenKind::LeftParen);
+
+        let mut args = Vec::new();
+        while !self.at(TokenKind::RightParen) && !self.eof() {
+            let param = self.expression_(0);
+            if !self.at(TokenKind::RightParen) {
+                self.eat(TokenKind::Comma);
+            }
+            args.push(param);
+        }
+        self.eat(TokenKind::RightParen);
+
+        args.into_boxed_slice()
+    }
+
+    fn index_expr(&mut self) -> Expression {
+        self.eat(TokenKind::LeftBracket);
+        let expr = self.expression_(0);
+        self.eat(TokenKind::RightBracket);
+        expr
+    }
+
     fn expression_(&mut self, mbp: u8) -> Expression {
         use TokenKind::*;
 
@@ -80,13 +106,13 @@ impl<'src> Parser<'src> {
             b @ (True | False) => Expression::Literal(Literal::Bool(b == True)),
             LeftParen => {
                 let expr = self.expression_(0);
-                self.expect(TokenKind::RightParen);
+                self.eat(TokenKind::RightParen);
                 expr
             }
             op @ (Minus | Bang | Tilde | Star | And) => {
                 let ((), rbp) = prefix_binding_power(op);
                 let rhs = self.expression_(rbp);
-                Expression::prefix_operator(op, rhs)
+                Expression::Operator(OperatorExpression::prefix(op, rhs))
             }
             _ => unimplemented!(),
         };
@@ -105,23 +131,21 @@ impl<'src> Parser<'src> {
                 if lbp < mbp {
                     break;
                 }
-                self.next();
 
                 if op == LeftParen {
-                    let mut params = Vec::new();
-                    while !self.at(RightParen) && !self.at(Eof) {
-                        let param = self.expression_(0);
-                        if !self.at(RightParen) {
-                            self.expect(Comma);
-                        }
-                        params.push(param);
-                    }
-                    self.expect(RightParen);
-                    lhs = Expression::call(lhs, params);
+                    let params = self.call_args();
+                    lhs = Expression::Call {
+                        func: Box::new(lhs),
+                        params,
+                    };
                 } else if op == LeftBracket {
-                    let rhs = self.expression_(0);
-                    self.expect(RightBracket);
-                    lhs = Expression::index(lhs, rhs);
+                    let idx = self.index_expr();
+                    lhs = Expression::Index {
+                        cont: Box::new(lhs),
+                        idx: Box::new(idx),
+                    };
+                } else {
+                    self.next();
                 }
 
                 continue;
@@ -135,7 +159,7 @@ impl<'src> Parser<'src> {
                 self.next();
                 let rhs = self.expression_(rbp);
 
-                lhs = Expression::infix_operator(lhs, op, rhs);
+                lhs = Expression::Operator(OperatorExpression::infix(lhs, op, rhs));
                 continue;
             }
 
@@ -149,7 +173,7 @@ impl<'src> Parser<'src> {
 fn parse_number(src: &str) -> Expression {
     // TODO: Handle more number formats and errors.
     src.parse::<u64>()
-        .map(Literal::Integer)
+        .map(Literal::Int)
         .map(Expression::Literal)
         .unwrap()
 }
